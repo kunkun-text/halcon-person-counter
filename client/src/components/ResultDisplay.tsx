@@ -37,11 +37,18 @@ export default function ResultDisplay({
         </CardHeader>
         <CardContent>
           <div className="relative rounded-lg overflow-hidden bg-black/20">
-            <img
-              src={imagePreview}
-              alt="预览"
-              className="w-full h-auto max-h-96 object-contain"
-            />
+            {imagePreview && (
+              <img
+                src={imagePreview}
+                alt="预览"
+                className="w-full h-auto max-h-96 object-contain"
+              />
+            )}
+            {!imagePreview && !isLoading && (
+              <div className="w-full h-96 flex items-center justify-center text-muted-foreground">
+                <p className="text-sm">还未上传图片</p>
+              </div>
+            )}
             {isLoading && (
               <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
                 <div className="text-center">
