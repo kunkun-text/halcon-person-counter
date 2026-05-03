@@ -37,7 +37,7 @@ function detectPeopleWithOpenCV(imageBuffer: Buffer): Promise<{
       
       // 调用 Python 检测脚本
       const pythonProcess = spawn(join(__dirname, "detection_wrapper.sh"), [
-        join(__dirname, "detection.py"),
+        join(__dirname, "detection_advanced.py"),
         tempImagePath
       ]);
       
@@ -121,7 +121,7 @@ function detectPeopleWithOpenCV(imageBuffer: Buffer): Promise<{
         clearTimeout(timeout);
       });
     } catch (error) {
-      console.error("[Detection] Error:", error, "Script path:", join(__dirname, "detection.py"));
+      console.error("[Detection] Error:", error, "Script path:", join(__dirname, "detection_yolo.py"));
       try {
         unlinkSync(tempImagePath);
       } catch (e) {
