@@ -1,0 +1,122 @@
+* Halcon HDevelop 人数识别示例代码
+* 
+* 功能：
+* - 读取图像
+* - 进行人体检测
+* - 返回检测结果
+*
+* 使用方法：
+* 1. 在 Halcon HDevelop 中打开此文件
+* 2. 修改图像路径
+* 3. 运行程序
+* 4. 查看识别结果
+
+* ============================================================
+* 主程序
+* ============================================================
+
+procedure person_detection(ImagePath, NumPeople, Detections, Confidence)
+    
+    * 读取图像
+    read_image(Image, ImagePath)
+    get_image_size(Image, Width, Height)
+    
+    * 转换为灰度图
+    convert_image_type(Image, ImageGray, 'int1')
+    
+    * 图像预处理
+    * 直方图均衡化，增强对比度
+    equalize_image_range(ImageGray, ImageEqual)
+    
+    * 高斯平滑，降低噪声
+    gauss_filter(ImageEqual, ImageSmooth, 3)
+    
+    * 人体检测 - 方法 1：使用边缘检测
+    edges_sub_pixel(ImageSmooth, Edges, 'canny', 1, 20, 40)
+    
+    * 方法 2：使用预训练分类器（如果可用）
+    * 注意：需要在 Halcon 中加载预训练的人体检测模型
+    * create_trained_classifier('path/to/person_detector.tfc', ClassifierHandle)
+    * classify_image_class_trobj(ImageGray, ClassifierHandle, 0.5, Detections)
+    
+    * 简化版本：使用连通域分析
+    * 这是一个基础的人体检测方法
+    threshold(ImageSmooth, Region, 50, 200)
+    
+    * 形态学操作
+    opening_circle(Region, RegionOpened, 10)
+    closing_circle(RegionOpened, RegionClosed, 15)
+    
+    * 连通域分析
+    connection(RegionClosed, ConnectedRegions)
+    
+    * 选择合适大小的区域（假设人体在一定尺寸范围内）
+    select_shape(ConnectedRegions, SelectedRegions, 'area', 'and', 5000, 100000)
+    
+    * 获取检测结果
+    count_obj(SelectedRegions, NumPeople)
+    
+    * 计算置信度（这里使用区域面积的平均值作为置信度指标）
+    area_center(SelectedRegions, Areas, CenterRow, CenterCol)
+    
+    * 构建检测框
+    region_to_bounding_box(SelectedRegions, Rows1, Cols1, Rows2, Cols2)
+    
+    * 计算平均置信度
+    if (NumPeople > 0)
+        Confidence = 0.85
+    else
+        Confidence = 0.0
+    endif
+    
+    Detections = SelectedRegions
+    
+endprocedure
+
+* ============================================================
+* 辅助函数：区域转边界框
+* ============================================================
+
+procedure region_to_bounding_box(Region, Rows1, Cols1, Rows2, Cols2)
+    
+    smallest_rectangle1(Region, Row1, Col1, Row2, Col2, Angle)
+    Rows1 = Row1
+    Cols1 = Col1
+    Rows2 = Row2
+    Cols2 = Col2
+    
+endprocedure
+
+* ============================================================
+* 可视化函数：显示检测结果
+* ============================================================
+
+procedure visualize_detections(Image, Detections, Window)
+    
+    set_color(Window, 'cyan')
+    set_line_width(Window, 2)
+    
+    * 绘制检测框
+    disp_region(Detections, Window)
+    
+endprocedure
+
+* ============================================================
+* 主程序入口
+* ============================================================
+
+* 设置图像路径
+ImagePath := 'test_image.jpg'
+
+* 执行人体检测
+person_detection(ImagePath, NumPeople, Detections, Confidence)
+
+* 输出结果
+write('检测到的人数: ', NumPeople)
+write('置信度: ', Confidence)
+
+* 显示结果（可选）
+* open_window(0, 0, 512, 512, 0, 'visible', '', WindowHandle)
+* read_image(Image, ImagePath)
+* disp_obj(Image, WindowHandle)
+* visualize_detections(Image, Detections, WindowHandle)

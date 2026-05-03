@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  # 后端服务
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: halcon-backend
+    ports:
+      - "8080:8080"
+    environment:
+      - JAVA_OPTS=-Xmx512m -Xms256m
+    volumes:
+      - ./backend/logs:/app/logs
+    networks:
+      - halcon-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # 前端服务（可选，用于生产环境）
+  frontend:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: halcon-frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    networks:
+      - halcon-network
+
+networks:
+  halcon-network:
+    driver: bridge
