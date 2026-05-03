@@ -2,12 +2,15 @@ import { z } from "zod";
 import { publicProcedure, router } from "../_core/trpc";
 import { saveRecognitionResult, getRecentResults } from "../recognition";
 import { storagePut } from "../storage";
+import { spawn } from "child_process";
+import { writeFileSync, unlinkSync } from "fs";
+import { join } from "path";
+import { tmpdir } from "os";
 
 /**
- * 简单的人数识别实现
- * 基于图片分析的模拟识别（实际应用中应使用 OpenCV 或 Halcon）
+ * 使用 Python OpenCV 进行真实的人体检测
  */
-function detectPeople(imageBuffer: Buffer): {
+function detectPeopleWithOpenCV(imageBuffer: Buffer): Promise<{
   totalPeople: number;
   confidence: number;
   detections: Array<{
@@ -19,34 +22,95 @@ function detectPeople(imageBuffer: Buffer): {
     confidence: number;
   }>;
   processingTime: number;
-} {
-  const startTime = Date.now();
-
-  // 模拟识别逻辑：基于图片大小生成随机检测结果
-  // 实际应用中应使用 OpenCV 或 Halcon 进行真实的人体检测
-  const imageSize = imageBuffer.length;
-  const baseCount = Math.floor(imageSize / 100000); // 每 100KB 大约 1 个人
-  const totalPeople = Math.max(1, baseCount + Math.floor(Math.random() * 3));
-  const confidence = 0.75 + Math.random() * 0.2; // 75-95% 置信度
-
-  // 生成模拟的检测框
-  const detections = Array.from({ length: totalPeople }, (_, i) => ({
-    id: i + 1,
-    x: Math.floor(Math.random() * 300),
-    y: Math.floor(Math.random() * 300),
-    width: 50 + Math.floor(Math.random() * 100),
-    height: 100 + Math.floor(Math.random() * 150),
-    confidence: 0.7 + Math.random() * 0.25,
-  }));
-
-  const processingTime = (Date.now() - startTime) / 1000;
-
-  return {
-    totalPeople,
-    confidence,
-    detections,
-    processingTime,
-  };
+}> {
+  return new Promise((resolve) => {
+    const startTime = Date.now();
+    const tempImagePath = join(tmpdir(), `image-${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`);
+    
+    try {
+      // 保存图片到临时文件
+      writeFileSync(tempImagePath, imageBuffer);
+      
+      // 调用 Python 检测脚本
+      const pythonProcess = spawn("python3", [
+        join(__dirname, "../detection.py"),
+        tempImagePath
+      ]);
+      
+      let output = "";
+      let errorOutput = "";
+      
+      pythonProcess.stdout.on("data", (data) => {
+        output += data.toString();
+      });
+      
+      pythonProcess.stderr.on("data", (data) => {
+        errorOutput += data.toString();
+      });
+      
+      pythonProcess.on("close", (code) => {
+        try {
+          // 清理临时文件
+          try {
+            unlinkSync(tempImagePath);
+          } catch (e) {
+            // 忽略删除失败
+          }
+          
+          if (code !== 0) {
+            console.error("[Detection] Python error:", errorOutput);
+            resolve({
+              totalPeople: 0,
+              confidence: 0,
+              detections: [],
+              processingTime: (Date.now() - startTime) / 1000,
+            });
+            return;
+          }
+          
+          const result = JSON.parse(output);
+          result.processingTime = (Date.now() - startTime) / 1000;
+          resolve(result);
+        } catch (error) {
+          console.error("[Detection] Parse error:", error);
+          resolve({
+            totalPeople: 0,
+            confidence: 0,
+            detections: [],
+            processingTime: (Date.now() - startTime) / 1000,
+          });
+        }
+      });
+      
+      pythonProcess.on("error", (error) => {
+        console.error("[Detection] Process error:", error);
+        try {
+          unlinkSync(tempImagePath);
+        } catch (e) {
+          // 忽略删除失败
+        }
+        resolve({
+          totalPeople: 0,
+          confidence: 0,
+          detections: [],
+          processingTime: (Date.now() - startTime) / 1000,
+        });
+      });
+    } catch (error) {
+      console.error("[Detection] Error:", error);
+      try {
+        unlinkSync(tempImagePath);
+      } catch (e) {
+        // 忽略删除失败
+      }
+      resolve({
+        totalPeople: 0,
+        confidence: 0,
+        detections: [],
+        processingTime: (Date.now() - startTime) / 1000,
+      });
+    }
+  });
 }
 
 export const recognitionRouter = router({
@@ -63,15 +127,22 @@ export const recognitionRouter = router({
     .mutation(async ({ input }) => {
       try {
         // 1. 进行人数识别
-        const recognitionResult = detectPeople(input.image);
+        const recognitionResult = await detectPeopleWithOpenCV(input.image);
 
         // 2. 上传图片到存储
         const fileKey = `recognition/${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-        const { url: imageUrl } = await storagePut(
-          fileKey,
-          input.image,
-          "image/jpeg"
-        );
+        let imageUrl = "";
+        try {
+          const result = await storagePut(
+            fileKey,
+            input.image,
+            "image/jpeg"
+          );
+          imageUrl = result.url;
+        } catch (error) {
+          console.warn("[Recognition] Failed to upload image:", error);
+          imageUrl = `file://${fileKey}`; // 备用 URL
+        }
 
         // 3. 保存结果到数据库
         await saveRecognitionResult({
