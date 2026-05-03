@@ -12,8 +12,11 @@ export default defineConfig({
       "@assets": path.resolve(templateRoot, "attached_assets"),
     },
   },
+  define: {
+    "import.meta.env.VITE_APP_ID": JSON.stringify(process.env.VITE_APP_ID || "test"),
+  },
   test: {
     environment: "node",
-    include: ["server/**/*.test.ts", "server/**/*.spec.ts"],
+    include: ["server/**/*.test.ts", "server/**/*.spec.ts", "client/**/*.test.ts", "client/**/*.spec.ts"],
   },
 });
