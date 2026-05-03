@@ -4,8 +4,12 @@ import { saveRecognitionResult, getRecentResults } from "../recognition";
 import { storagePut } from "../storage";
 import { spawn } from "child_process";
 import { writeFileSync, unlinkSync } from "fs";
-import { join } from "path";
+import { join, dirname } from "path";
 import { tmpdir } from "os";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 /**
  * 使用 Python OpenCV 进行真实的人体检测
@@ -32,8 +36,8 @@ function detectPeopleWithOpenCV(imageBuffer: Buffer): Promise<{
       writeFileSync(tempImagePath, imageBuffer);
       
       // 调用 Python 检测脚本
-      const pythonProcess = spawn("python3", [
-        join(__dirname, "../detection.py"),
+      const pythonProcess = spawn(join(__dirname, "detection_wrapper.sh"), [
+        join(__dirname, "detection.py"),
         tempImagePath
       ]);
       
@@ -96,8 +100,28 @@ function detectPeopleWithOpenCV(imageBuffer: Buffer): Promise<{
           processingTime: (Date.now() - startTime) / 1000,
         });
       });
+      
+      // 设置超时防止进程挂起
+      const timeout = setTimeout(() => {
+        pythonProcess.kill();
+        try {
+          unlinkSync(tempImagePath);
+        } catch (e) {
+          // 忽略删除失败
+        }
+        resolve({
+          totalPeople: 0,
+          confidence: 0,
+          detections: [],
+          processingTime: (Date.now() - startTime) / 1000,
+        });
+      }, 30000); // 30 秒超时
+      
+      pythonProcess.on("close", () => {
+        clearTimeout(timeout);
+      });
     } catch (error) {
-      console.error("[Detection] Error:", error);
+      console.error("[Detection] Error:", error, "Script path:", join(__dirname, "detection.py"));
       try {
         unlinkSync(tempImagePath);
       } catch (e) {
