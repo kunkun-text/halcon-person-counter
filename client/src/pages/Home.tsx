@@ -28,27 +28,28 @@ interface RecognitionResult {
  * - 流畅动画和即时反馈
  */
 export default function Home() {
+  // 图片识别状态
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string>('');
   const [result, setResult] = useState<RecognitionResult | undefined>();
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string>('');
+  const [recognitionError, setRecognitionError] = useState<string>('')
 
   const handleImageSelect = (file: File, preview: string) => {
     setImageFile(file);
     setImagePreview(preview);
     setResult(undefined);
-    setError('');
+    setRecognitionError('');
   };
 
   const handleRecognize = async () => {
     if (!imageFile) {
-      setError('请先选择图片');
+      setRecognitionError('请先选择图片');
       return;
     }
 
     setIsLoading(true);
-    setError('');
+    setRecognitionError('');
 
     try {
       const formData = new FormData();
@@ -68,7 +69,7 @@ export default function Home() {
       const data = await response.json();
       setResult(data);
     } catch (err) {
-      setError(
+      setRecognitionError(
         err instanceof Error ? err.message : '识别过程中出错，请稍后重试'
       );
     } finally {
@@ -80,7 +81,7 @@ export default function Home() {
     setImageFile(null);
     setImagePreview('');
     setResult(undefined);
-    setError('');
+    setRecognitionError('');
   };
 
   return (
@@ -176,7 +177,7 @@ export default function Home() {
                 imagePreview={imagePreview}
                 result={result}
                 isLoading={isLoading}
-                error={error}
+                error={recognitionError}
               />
             </div>
           </div>
